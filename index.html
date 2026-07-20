@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Xsos — מערכת ניהול מלאי</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+
+
 <style>
 :root {
   --bg:#0f1117; --surf:#1a1d27; --surf2:#22263a; --surf3:#2a2f47;
@@ -477,28 +478,22 @@ tr.clickable:hover td{background:var(--surf2);}
           <span style="font-size:11px;color:var(--text2);">עובד מנייד ומחשב</span>
         </div>
         <div class="card-body">
-          <div id="scan-viewport" style="position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;display:none;">
-            <video id="scan-video" style="width:100%;display:block;" playsinline autoplay></video>
-            <canvas id="scan-canvas" style="display:none;"></canvas>
-            <!-- Targeting overlay -->
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
-              <div style="width:220px;height:120px;border:2px solid var(--accent);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,.4);">
-                <div style="position:absolute;top:0;right:0;width:20px;height:20px;border-top:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 6px 0 0;"></div>
-                <div style="position:absolute;top:0;left:0;width:20px;height:20px;border-top:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:6px 0 0 0;"></div>
-                <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;border-bottom:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 0 6px 0;"></div>
-                <div style="position:absolute;bottom:0;left:0;width:20px;height:20px;border-bottom:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:0 0 0 6px;"></div>
-              </div>
-            </div>
-            <div id="scan-line" style="position:absolute;left:calc(50% - 110px);width:220px;height:2px;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:scanLine 2s linear infinite;display:none;"></div>
-          </div>
+          <!-- html5-qrcode מנהל את המצלמה בעצמו -->
+          <div id="qr-reader" style="width:100%;border-radius:10px;overflow:hidden;"></div>
           <style>
-            @keyframes scanLine{0%{top:calc(50% - 60px);}50%{top:calc(50% + 60px);}100%{top:calc(50% - 60px);}}
-            @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+            #qr-reader { background: var(--surf2); }
+            #qr-reader video { border-radius:10px; }
+            #qr-reader__scan_region { border-radius:10px; }
+            #qr-reader__dashboard { background: var(--surf2) !important; padding:10px !important; }
+            #qr-reader__dashboard_section_csr button {
+              background: var(--accent) !important; color:#fff !important;
+              border:none !important; border-radius:8px !important;
+              padding:8px 16px !important; font-size:13px !important; cursor:pointer !important;
+            }
+            #qr-reader__dashboard_section_swaplink { color: var(--text2) !important; font-size:11px !important; }
+            #qr-reader__status_span { color: var(--text2) !important; font-size:12px !important; }
+            #qr-reader__camera_selection { background:var(--surf2)!important;border:1px solid var(--border)!important;color:var(--text)!important;border-radius:8px!important;padding:6px!important; }
           </style>
-          <div id="scan-placeholder" style="width:100%;height:200px;background:var(--surf2);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border:2px dashed var(--border);">
-            <span style="font-size:48px;">📷</span>
-            <span style="font-size:13px;color:var(--text2);">לחץ להפעלת המצלמה</span>
-          </div>
           <div style="display:flex;gap:8px;margin-top:12px;">
             <button class="btn-primary2" id="start-scan-btn" onclick="startScan()" style="flex:1;">▶ הפעל מצלמה</button>
             <button class="btn-sec" id="stop-scan-btn" onclick="stopScan()" style="flex:1;display:none;">⏹ עצור</button>
@@ -1109,129 +1104,46 @@ let scanInterval = null;
 let scanHistory = [];
 let lastScannedKey = null;
 
+let html5QrCode = null;
+
 function startScan() {
-  const video = document.getElementById('scan-video');
-  const placeholder = document.getElementById('scan-placeholder');
-  const viewport = document.getElementById('scan-viewport');
+  const status = document.getElementById('scan-status');
   const startBtn = document.getElementById('start-scan-btn');
   const stopBtn = document.getElementById('stop-scan-btn');
-  const status = document.getElementById('scan-status');
-  const scanLine = document.getElementById('scan-line');
-
-  status.textContent = 'מבקש גישה למצלמה...';
-
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment', width: {ideal:1280}, height: {ideal:720} }
-  }).then(stream => {
-    scanStream = stream;
-    video.srcObject = stream;
-    video.play();
-    placeholder.style.display = 'none';
-    viewport.style.display = 'block';
-    scanLine.style.display = 'block';
-    startBtn.style.display = 'none';
-    stopBtn.style.display = '';
-    status.textContent = '🔍 מחפש ברקוד... כוון את המצלמה לברקוד';
-    addAudit('📷','סריקת ברקוד הופעלה',STATE.currentUser,'var(--accent)');
-    startDecoding();
+  startBtn.style.display = 'none';
+  stopBtn.style.display = '';
+  status.textContent = '🔍 מאתחל מצלמה...';
+  html5QrCode = new Html5Qrcode("qr-reader");
+  const config = {
+    fps: 15,
+    qrbox: { width: 250, height: 150 },
+    aspectRatio: 1.5,
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.ITF,
+    ]
+  };
+  html5QrCode.start(
+    { facingMode: "environment" }, config,
+    (decodedText) => { handleScanResult(decodedText); },
+    () => {}
+  ).then(() => {
+    status.textContent = '✅ מצלמה פעילה — כוון את הברקוד למסגרת';
   }).catch(err => {
-    status.textContent = '❌ לא ניתן לגשת למצלמה. נסה הזנה ידנית.';
-    console.error(err);
+    status.textContent = '❌ שגיאה: ' + err;
+    startBtn.style.display = ''; stopBtn.style.display = 'none';
   });
 }
 
 function stopScan() {
-  if (scanStream) { scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
-  if (scanInterval) { clearInterval(scanInterval); scanInterval=null; }
-  zxingReader = null;
-  document.getElementById('scan-viewport').style.display='none';
-  document.getElementById('scan-placeholder').style.display='flex';
-  document.getElementById('start-scan-btn').style.display='';
-  document.getElementById('stop-scan-btn').style.display='none';
-  document.getElementById('scan-line').style.display='none';
-  document.getElementById('scan-status').textContent='';
-}
-
-let zxingReader = null;
-
-function startDecoding() {
-  const video = document.getElementById('scan-video');
-  const canvas = document.getElementById('scan-canvas');
-  const ctx = canvas.getContext('2d');
-  const status = document.getElementById('scan-status');
-
-  // Try ZXing first — works on all browsers, best for EAN/Code128
-  if (typeof ZXing !== 'undefined') {
-    try {
-      const hints = new Map();
-      const formats = [
-        ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-        ZXing.BarcodeFormat.QR_CODE
-      ];
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      zxingReader = new ZXing.MultiFormatReader();
-      zxingReader.setHints(hints);
-
-      status.textContent = '🔍 ZXing מוכן — כוון את הברקוד למסגרת הכחולה';
-
-      scanInterval = setInterval(() => {
-        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-        try {
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const luminance = new ZXing.RGBLuminanceSource(imageData.data, canvas.width, canvas.height);
-          const binary = new ZXing.HybridBinarizer(luminance);
-          const bitmap = new ZXing.BinaryBitmap(binary);
-          const result = zxingReader.decode(bitmap);
-          if (result) handleScanResult(result.getText());
-        } catch(e) {
-          // NotFoundException is normal — no barcode in frame yet
-        }
-      }, 250);
-      return;
-    } catch(e) {
-      console.warn('ZXing init failed:', e);
-    }
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => { html5QrCode.clear(); html5QrCode = null; }).catch(e=>{});
   }
-
-  // Fallback: jsQR (QR codes only but universal)
-  if (typeof jsQR !== 'undefined') {
-    status.textContent = '🔍 מצב jsQR — עובד עם QR קודים';
-    scanInterval = setInterval(() => {
-      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, canvas.width, canvas.height, {inversionAttempts:'dontInvert'});
-      if (code) handleScanResult(code.data);
-    }, 200);
-    return;
-  }
-
-  // Last resort: native BarcodeDetector
-  if ('BarcodeDetector' in window) {
-    const detector = new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code','upc_a','upc_e']});
-    status.textContent = '🔍 מצב Native — כוון את הברקוד';
-    scanInterval = setInterval(async () => {
-      if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      try {
-        const codes = await detector.detect(canvas);
-        if (codes.length > 0) handleScanResult(codes[0].rawValue);
-      } catch(e) {}
-    }, 300);
-    return;
-  }
-
-  status.innerHTML = '⚠️ לא נמצאה ספריית סריקה. השתמש בהזנה ידנית.';
+  document.getElementById('start-scan-btn').style.display = '';
+  document.getElementById('stop-scan-btn').style.display = 'none';
+  document.getElementById('scan-status').textContent = '';
 }
 
 function handleScanResult(code) {
@@ -1333,7 +1245,7 @@ function clearHistory() {
 // Stop camera when leaving scan page
 const origShowPage = showPage;
 window.showPage = function(id, btn) {
-  if (id !== 'scan' && scanStream) stopScan();
+  if (id !== 'scan' && html5QrCode) stopScan();
   origShowPage(id, btn);
 };
 </script>
