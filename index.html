@@ -304,6 +304,7 @@ tr.clickable:hover td{background:var(--surf2);}
         <span style="font-size:20px;">🔔</span>
         <div class="alert-dot" id="top-alert-dot">0</div>
       </div>
+      <div class="date-chip" id="hw-indicator" style="border-color:var(--border);" title="סורק חיצוני מחובר">📡</div>
       <div class="date-chip">📅 <span id="updated-label">16/06/2026</span></div>
     </div>
   </div>
@@ -480,7 +481,7 @@ tr.clickable:hover td{background:var(--surf2);}
 
           <!-- Manual add -->
           <div style="display:flex;gap:8px;margin-bottom:4px;">
-            <input id="st-manual-input" placeholder="הזן ברקוד / מפתח ידנית..." style="flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;" onkeydown="if(event.key==='Enter'){addSTItem(document.getElementById('st-manual-input').value);this.value='';}">
+            <input id="st-manual-input" placeholder="סרוק עם סורק חיצוני או הזן ידנית..." style="flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;" onkeydown="if(event.key==='Enter'){addSTItem(document.getElementById('st-manual-input').value);this.value='';}">
             <button class="btn-primary2" onclick="addSTItem(document.getElementById('st-manual-input').value);document.getElementById('st-manual-input').value='';" style="padding:9px 14px;white-space:nowrap;">➕</button>
           </div>
           <div id="st-scan-status" style="font-size:11px;color:var(--text2);min-height:16px;margin-bottom:4px;"></div>
@@ -596,7 +597,7 @@ tr.clickable:hover td{background:var(--surf2);}
         <div class="card-header"><span class="card-title">⌨️ הזנה ידנית</span></div>
         <div class="card-body">
           <div style="display:flex;gap:8px;">
-            <input id="manual-barcode" placeholder="הזן ברקוד או מפתח דגם..." style="flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')lookupBarcode(document.getElementById('manual-barcode').value)">
+            <input id="manual-barcode" placeholder="סרוק עם סורק חיצוני, או הזן ידנית..." style="flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;outline:none;" onkeydown="if(event.key==='Enter')lookupBarcode(document.getElementById('manual-barcode').value)">
             <button class="btn-primary2" onclick="lookupBarcode(document.getElementById('manual-barcode').value)" style="padding:10px 18px;white-space:nowrap;">חפש</button>
           </div>
         </div>
@@ -1551,6 +1552,77 @@ window.showPage = function(id, btn) {
   if (id !== 'stocktake' && stScanner) stopSTScan();
   origShowPage2(id, btn);
 };
+
+
+// ===================== HARDWARE SCANNER SUPPORT =====================
+// סורקי ברקוד מקצועיים עובדים כמקלדת — שולחים טקסט + Enter
+let hwScanBuffer = '';
+let hwScanTimer = null;
+
+document.addEventListener('keypress', function(e) {
+  // Ignore if user is typing in an input field manually
+  const tag = document.activeElement.tagName;
+  const isTyping = (tag === 'INPUT' || tag === 'TEXTAREA') && e.key !== 'Enter';
+  
+  if (e.key === 'Enter') {
+    if (hwScanBuffer.length >= 3) {
+      handleHWScan(hwScanBuffer.trim());
+    }
+    hwScanBuffer = '';
+    if (hwScanTimer) clearTimeout(hwScanTimer);
+    return;
+  }
+
+  if (!isTyping) {
+    hwScanBuffer += e.key;
+    if (hwScanTimer) clearTimeout(hwScanTimer);
+    hwScanTimer = setTimeout(() => { hwScanBuffer = ''; }, 100);
+  }
+});
+
+function handleHWScan(code) {
+  if (!code) return;
+  
+  const activePage = document.querySelector('.page.active');
+  if (!activePage) return;
+  const pageId = activePage.id;
+
+  if (pageId === 'page-stocktake') {
+    // ספירת מלאי — הוסף לרשימה
+    addSTItem(code);
+    // Flash the status
+    const s = document.getElementById('st-scan-status');
+    s.style.color = 'var(--green)';
+    s.textContent = '📡 סורק חיצוני: ' + code;
+    setTimeout(()=>{ s.style.color='var(--text2)'; s.textContent = stScanner ? '🔍 מצלמה פעילה — סורק...' : '📡 מחכה לסריקה...'; }, 1500);
+
+  } else if (pageId === 'page-scan') {
+    // דף סריקה — חפש דגם
+    document.getElementById('manual-barcode').value = code;
+    lookupBarcode(code);
+
+  } else if (pageId === 'page-inventory') {
+    // מלאי — חפש וסנן
+    document.getElementById('inv-search').value = code;
+    filterInv();
+    // אם נמצא דגם אחד — פתח את המגירה אוטומטית
+    if (STATE.invFiltered.length === 1) {
+      const p = STATE.invFiltered[0];
+      setTimeout(()=>openDrawer(p.key, p.name, p.shamgar, p.machsan, p.total), 200);
+    }
+  } else {
+    // כל דף אחר — עבור לדף סריקה
+    const scanBtn = document.querySelector('[onclick*="showPage('scan'"]');
+    if (scanBtn) showPage('scan', scanBtn);
+    setTimeout(() => {
+      document.getElementById('manual-barcode').value = code;
+      lookupBarcode(code);
+    }, 100);
+  }
+
+  // Always add to audit
+  addAudit('📡', 'סריקה חיצונית: ' + code, 'סורק מקצועי', 'var(--purple)');
+}
 
 </script>
 </body>
