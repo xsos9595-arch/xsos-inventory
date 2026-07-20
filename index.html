@@ -289,6 +289,7 @@ tr.clickable:hover td{background:var(--surf2);}
     <button class="nav-item" id="nav-users" onclick="showPage('users',this)"><span class="nav-icon">👥</span><span>משתמשים</span></button>
     <button class="nav-item" id="nav-audit" onclick="showPage('audit',this)"><span class="nav-icon">📋</span><span>יומן פעולות</span></button>
     <button class="nav-item" id="nav-scan" onclick="showPage('scan',this)"><span class="nav-icon">📷</span><span>סריקת ברקוד</span></button>
+    <button class="nav-item" id="nav-stocktake" onclick="showPage('stocktake',this)"><span class="nav-icon">🔢</span><span>ספירת מלאי</span></button>
   </nav>
   <div class="sidebar-footer">
     <button class="logout-btn" onclick="doLogout()">🚪 יציאה</button>
@@ -437,6 +438,94 @@ tr.clickable:hover td{background:var(--surf2);}
       <div class="card-body" id="audit-body"></div>
     </div>
   </div>
+
+  <!-- STOCKTAKE PAGE -->
+  <div class="page" id="page-stocktake">
+    <div style="max-width:580px;margin:0 auto;">
+
+      <!-- Mode selector -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <span class="card-title">🔢 ספירת מלאי — סריקה רציפה</span>
+          <span style="font-size:11px;color:var(--text2);">כל סריקה מוסיפה לרשימה</span>
+        </div>
+        <div class="card-body">
+          <!-- Store selector -->
+          <div style="margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600;">חנות לספירה:</div>
+            <div style="display:flex;gap:8px;">
+              <button class="role-btn active" id="st-store-shamgar" onclick="setSTStore('שמגר',this)">שמגר 16</button>
+              <button class="role-btn" id="st-store-machsan" onclick="setSTStore('מחסן רב',this)">מחסן רב</button>
+              <button class="role-btn" id="st-store-both" onclick="setSTStore('שתיהן',this)">שתיהן</button>
+            </div>
+          </div>
+
+          <!-- Scanner -->
+          <div id="st-qr-reader" style="width:100%;border-radius:10px;overflow:hidden;margin-bottom:12px;"></div>
+          <style>
+            #st-qr-reader { background: var(--surf2); }
+            #st-qr-reader video { border-radius:10px; }
+            #st-qr-reader__dashboard { background: var(--surf2) !important; padding:10px !important; }
+            #st-qr-reader__dashboard_section_csr button {
+              background: var(--green) !important; color:#fff !important;
+              border:none !important; border-radius:8px !important;
+              padding:8px 16px !important; font-size:13px !important; cursor:pointer !important;
+            }
+            #st-qr-reader__camera_selection { background:var(--surf2)!important;border:1px solid var(--border)!important;color:var(--text)!important;border-radius:8px!important;padding:6px!important; }
+          </style>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <button class="btn-primary2" id="st-start-btn" onclick="startSTScan()" style="flex:1;background:var(--green);">▶ התחל סריקה רציפה</button>
+            <button class="btn-sec" id="st-stop-btn" onclick="stopSTScan()" style="flex:1;display:none;">⏹ עצור</button>
+          </div>
+
+          <!-- Manual add -->
+          <div style="display:flex;gap:8px;margin-bottom:4px;">
+            <input id="st-manual-input" placeholder="הזן ברקוד / מפתח ידנית..." style="flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;" onkeydown="if(event.key==='Enter'){addSTItem(document.getElementById('st-manual-input').value);this.value='';}">
+            <button class="btn-primary2" onclick="addSTItem(document.getElementById('st-manual-input').value);document.getElementById('st-manual-input').value='';" style="padding:9px 14px;white-space:nowrap;">➕</button>
+          </div>
+          <div id="st-scan-status" style="font-size:11px;color:var(--text2);min-height:16px;margin-bottom:4px;"></div>
+        </div>
+      </div>
+
+      <!-- Live counter -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+        <div class="kpi blue" style="padding:14px;text-align:center;">
+          <div class="kpi-label">פריטים נסרקו</div>
+          <div class="kpi-val" id="st-count-scanned">0</div>
+        </div>
+        <div class="kpi green" style="padding:14px;text-align:center;">
+          <div class="kpi-label">דגמים שונים</div>
+          <div class="kpi-val" id="st-count-unique">0</div>
+        </div>
+        <div class="kpi yellow" style="padding:14px;text-align:center;">
+          <div class="kpi-label">לא זוהו</div>
+          <div class="kpi-val" id="st-count-unknown">0</div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="export-btn" onclick="exportSTExcel()" style="flex:1;justify-content:center;padding:10px;">📥 ייצוא Excel</button>
+        <button class="export-btn" onclick="clearSTList()" style="padding:10px 14px;border-color:var(--red);color:var(--red);">🗑️ נקה</button>
+      </div>
+
+      <!-- Scanned items table -->
+      <div class="tbl-wrap">
+        <div class="tbl-top">
+          <span class="tbl-top-label">רשימת ספירה</span>
+          <span class="count-lbl" id="st-table-count">0 פריטים</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>#</th><th>מפתח</th><th>שם דגם</th><th>כמות</th><th>חנות</th><th>שעה</th><th></th>
+          </tr></thead>
+          <tbody id="st-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
 </main>
 </div>
 
@@ -695,7 +784,7 @@ function showPage(id, btn) {
   document.getElementById('page-'+id).classList.add('active');
   if (btn) btn.classList.add('active');
   const titles = {dashboard:'סקירה כללית',inventory:'מלאי דגמים',alerts:'התראות',
-    upload:'עדכון מלאי',rules:'כללים עסקיים',users:'משתמשים',audit:'יומן פעולות',scan:'סריקת ברקוד'};
+    upload:'עדכון מלאי',rules:'כללים עסקיים',users:'משתמשים',audit:'יומן פעולות',scan:'סריקת ברקוד', stocktake:'ספירת מלאי'};
   document.getElementById('page-title').textContent = titles[id]||id;
   if (id==='alerts') renderAlerts();
   if (id==='rules') renderRules();
@@ -1248,6 +1337,221 @@ window.showPage = function(id, btn) {
   if (id !== 'scan' && html5QrCode) stopScan();
   origShowPage(id, btn);
 };
+
+// ===================== STOCKTAKE =====================
+let stScanner = null;
+let stItems = []; // {barcode, key, name, qty, store, time}
+let stStore = 'שמגר';
+let stLastCode = null;
+let stCooldown = false;
+
+function setSTStore(store, el) {
+  stStore = store;
+  document.querySelectorAll('#st-store-shamgar,#st-store-machsan,#st-store-both').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function startSTScan() {
+  document.getElementById('st-start-btn').style.display = 'none';
+  document.getElementById('st-stop-btn').style.display = '';
+  document.getElementById('st-scan-status').textContent = '🔍 מצלמה פעילה — סורק...';
+
+  stScanner = new Html5Qrcode("st-qr-reader");
+  const config = {
+    fps: 12,
+    qrbox: { width: 260, height: 140 },
+    aspectRatio: 1.6,
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.QR_CODE,
+    ]
+  };
+
+  stScanner.start(
+    { facingMode: "environment" }, config,
+    (code) => {
+      if (stCooldown) return; // prevent double-scan
+      stCooldown = true;
+      setTimeout(() => { stCooldown = false; }, 1500);
+      addSTItem(code);
+    },
+    () => {}
+  ).catch(err => {
+    document.getElementById('st-scan-status').textContent = '❌ ' + err;
+    document.getElementById('st-start-btn').style.display = '';
+    document.getElementById('st-stop-btn').style.display = 'none';
+  });
+}
+
+function stopSTScan() {
+  if (stScanner) {
+    stScanner.stop().then(() => { stScanner.clear(); stScanner = null; }).catch(()=>{});
+  }
+  document.getElementById('st-start-btn').style.display = '';
+  document.getElementById('st-stop-btn').style.display = 'none';
+  document.getElementById('st-scan-status').textContent = '⏹ סריקה עצורה';
+}
+
+function addSTItem(code) {
+  code = (code||'').trim();
+  if (!code) return;
+
+  // Check if already in list → increment qty
+  const existing = stItems.find(i => i.barcode === code && i.store === stStore);
+  if (existing) {
+    existing.qty++;
+    flashRow(code);
+    updateSTStats();
+    renderSTTable();
+    return;
+  }
+
+  // Lookup product
+  const product = STATE.products.find(p => p.key === code || code.startsWith(p.key) || p.key.startsWith(code));
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  stItems.unshift({
+    barcode: code,
+    key: product ? product.key : '?',
+    name: product ? product.name : 'לא זוהה',
+    qty: 1,
+    store: stStore,
+    time: timeStr,
+    found: !!product
+  });
+
+  updateSTStats();
+  renderSTTable();
+  vibrateOnScan(!!product);
+
+  // Flash status
+  const status = document.getElementById('st-scan-status');
+  if (product) {
+    status.textContent = '✅ ' + product.name + ' — נוסף!';
+    status.style.color = 'var(--green)';
+  } else {
+    status.textContent = '❓ ברקוד לא זוהה: ' + code;
+    status.style.color = 'var(--yellow)';
+  }
+  setTimeout(() => {
+    status.textContent = '🔍 מצלמה פעילה — סורק...';
+    status.style.color = 'var(--text2)';
+  }, 1500);
+}
+
+function vibrateOnScan(found) {
+  if (navigator.vibrate) navigator.vibrate(found ? [50] : [100, 50, 100]);
+}
+
+function flashRow(code) {
+  const rows = document.querySelectorAll('#st-tbody tr');
+  rows.forEach(row => {
+    if (row.dataset.barcode === code) {
+      row.style.background = 'rgba(16,185,129,0.3)';
+      setTimeout(() => { row.style.background = ''; }, 600);
+    }
+  });
+}
+
+function updateSTStats() {
+  const total = stItems.reduce((a,i) => a+i.qty, 0);
+  const unique = new Set(stItems.map(i=>i.key)).size;
+  const unknown = stItems.filter(i=>!i.found).length;
+  document.getElementById('st-count-scanned').textContent = total;
+  document.getElementById('st-count-unique').textContent = unique;
+  document.getElementById('st-count-unknown').textContent = unknown;
+  document.getElementById('st-table-count').textContent = stItems.length + ' פריטים';
+}
+
+function renderSTTable() {
+  document.getElementById('st-tbody').innerHTML = stItems.map((item, idx) => `
+    <tr data-barcode="${item.barcode}" style="transition:background .3s;">
+      <td style="color:var(--text3);font-size:11px;">${stItems.length - idx}</td>
+      <td><code style="font-size:11px;color:var(--text2)">${item.key}</code></td>
+      <td style="font-weight:${item.found?'600':'400'};color:${item.found?'var(--text)':'var(--yellow)'};">${item.name}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button onclick="changeQty(${idx},-1)" style="background:var(--surf2);border:1px solid var(--border);border-radius:4px;width:22px;height:22px;cursor:pointer;color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;">−</button>
+          <strong style="font-size:15px;min-width:24px;text-align:center;">${item.qty}</strong>
+          <button onclick="changeQty(${idx},1)" style="background:var(--surf2);border:1px solid var(--border);border-radius:4px;width:22px;height:22px;cursor:pointer;color:var(--text);font-size:14px;display:flex;align-items:center;justify-content:center;">+</button>
+        </div>
+      </td>
+      <td style="font-size:11px;color:var(--text2);">${item.store}</td>
+      <td style="font-size:11px;color:var(--text3);">${item.time}</td>
+      <td><button onclick="removeSTItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+function changeQty(idx, delta) {
+  stItems[idx].qty = Math.max(0, stItems[idx].qty + delta);
+  if (stItems[idx].qty === 0) stItems.splice(idx, 1);
+  updateSTStats();
+  renderSTTable();
+}
+
+function removeSTItem(idx) {
+  stItems.splice(idx, 1);
+  updateSTStats();
+  renderSTTable();
+}
+
+function clearSTList() {
+  if (stItems.length === 0) return;
+  if (!confirm('למחוק את כל רשימת הספירה?')) return;
+  stItems = [];
+  updateSTStats();
+  renderSTTable();
+}
+
+function exportSTExcel() {
+  if (stItems.length === 0) {
+    alert('אין פריטים לייצוא');
+    return;
+  }
+
+  const data = stItems.map((item, idx) => ({
+    '#': idx + 1,
+    'ברקוד': item.barcode,
+    'מפתח דגם': item.key,
+    'שם דגם': item.name,
+    'כמות שנספרה': item.qty,
+    'חנות': item.store,
+    'שעת סריקה': item.time,
+    'נמצא במערכת': item.found ? 'כן' : 'לא'
+  }));
+
+  // Add summary row
+  data.push({});
+  data.push({
+    '#': 'סה"כ',
+    'כמות שנספרה': stItems.reduce((a,i) => a+i.qty, 0),
+    'שם דגם': `${new Set(stItems.map(i=>i.key)).size} דגמים שונים`,
+    'חנות': stStore
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:4},{wch:16},{wch:14},{wch:28},{wch:14},{wch:12},{wch:12},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'ספירת מלאי');
+
+  const date = new Date().toLocaleDateString('he-IL').replace(/\//g,'-');
+  const time = new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}).replace(':','-');
+  XLSX.writeFile(wb, `ספירת_מלאי_${date}_${time}.xlsx`);
+
+  addAudit('📥', `ייצוא ספירת מלאי`, `${stItems.length} פריטים, ${stItems.reduce((a,i)=>a+i.qty,0)} יחידות`, 'var(--green)');
+}
+
+// Stop stocktake scanner when leaving page
+const origShowPage2 = window.showPage;
+window.showPage = function(id, btn) {
+  if (id !== 'stocktake' && stScanner) stopSTScan();
+  origShowPage2(id, btn);
+};
+
 </script>
 </body>
 </html>
